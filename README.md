@@ -1,71 +1,37 @@
-# Google Apps Script Workflow Demo (Proof of Concept)
+# Workflow Demo — Zero‑Setup Test
 
-This is a minimal web app that demonstrates automating a Google Drive/Docs/Sheets workflow:
-- Create a Drive folder and a Google Doc from a template
-- Replace placeholders in the Doc (e.g., `{{RequestID}}`, `{{Title}}`)
-- Log the request into a master Google Sheet
-- Provide a simple UI to create a request and view recent ones
+This proof‑of‑concept is a Google Apps Script web app that:
+- Creates a Drive folder and a Google Doc per request
+- Logs each request in a Google Sheet
+- Shows a simple UI to submit and list recent requests
 
-## What you get
-- `gas/Code.gs` — server-side Apps Script (V8) functions and endpoints
-- `gas/Index.html` — client UI served by `doGet`
-- `gas/appsscript.json` — manifest with required scopes
+No manual IDs, no template, no prior setup.
 
-## Prerequisites
-- A Google account with access to Drive, Docs, and Sheets
-- One Google Sheet to act as the master tracker (record rows)
-- One Google Doc to act as a template. Add placeholders you want replaced:
-  - `{{RequestID}}` `{{Title}}` `{{Type}}` `{{CreatedAt}}`
-- One Drive folder to act as the parent for created request folders
+## Test in 3 minutes
+1. Open `script.google.com` → New project.
+2. Create files and paste from this repo:
+   - `Code.gs` → `gas/Code.gs`
+   - `Index.html` → `gas/Index.html`
+   - `appsscript.json` → `gas/appsscript.json` (View → Show manifest file)
+3. Deploy → New deployment → Web app → Execute as: Me → Access: Anyone with the link → Deploy.
+4. Open the URL. Authorize when prompted.
+5. Submit a request.
 
-## Setup (about 10 minutes)
-1. Create a Google Sheet and copy its ID (the part after `/d/` in the URL). Optionally add a sheet named `MasterTracker`.
-2. Create a Google Doc to use as the template and copy its ID. Add placeholders like `{{RequestID}}` in the body.
-3. Create a Drive folder to contain all created request folders; copy its ID.
-4. In your browser, open a new Apps Script project (`script.google.com`) and choose Blank project.
-5. Create these files in the project and paste the contents from this repository:
-   - `Code.gs` (from `gas/Code.gs`)
-   - `Index.html` (from `gas/Index.html`)
-   - `appsscript.json` (from `gas/appsscript.json`) via File → Project properties → Scopes/Manifest editor (or from Editor: View → Show manifest file)
-6. In `Code.gs`, update the configuration at the top:
-   ```js
-   const CONFIG = {
-     spreadsheetId: 'YOUR_SHEET_ID',
-     sheetName: 'MasterTracker',
-     parentFolderId: 'YOUR_PARENT_FOLDER_ID',
-     templateDocIdByType: { General: 'YOUR_TEMPLATE_DOC_ID' },
-     statusValues: ['Submitted','In Review','Approved','Rejected','Delivered','Archived']
-   };
-   ```
-7. Run `initializeProject` once to create headers if needed and authorize the script when prompted.
+What happens automatically on first run:
+- A Spreadsheet named `Workflow Demo Tracker` is created (with sheet `MasterTracker`).
+- A Drive folder named `Workflow Demo Requests` is created.
+- A subfolder and Doc are created for your request. The Doc is prefilled with basic info.
+- A row is appended to the tracker with links.
 
-## Deploy the web app
-1. Click Deploy → New deployment → Select type: Web app.
-2. Description: `Workflow Demo`.
-3. Execute as: `Me`.
-4. Who has access: `Anyone with the link` (or your domain only, as desired).
-5. Deploy and copy the web app URL. Open it to use the UI.
+Where to find things later
+- The created Spreadsheet and Folder are in your Drive root.
+- The app stores their IDs in Script Properties, so subsequent runs reuse them.
 
-## Using the app
-- Fill out the form and click Create request.
-- The app will:
-  - Generate a `RequestID`
-  - Create a subfolder in your parent folder
-  - Copy the template Doc into that folder and replace placeholders
-  - Append a row to your master Sheet
-- Links to the new folder/doc will be shown and added to the table of recent requests.
+Optional
+- Change names in `DEFAULTS` (top of `Code.gs`).
+- Add email notifications (requires Gmail scope) or more statuses.
 
-## Customization ideas
-- Add more request `Type` values and map them to different templates in `templateDocIdByType`.
-- Add email notifications (require adding the Gmail scope & `MailApp.sendEmail`).
-- Add status change actions and buttons, backed by `setStatus(requestId, status)`.
-- Add permissions sharing for requester/assignee using DriveApp permissions.
-
-## Troubleshooting
-- If you get a permissions error creating files, ensure you deployed the web app as `Me` and that your account has access to the parent folder/template.
-- If the page loads but recent requests is empty, confirm you set the correct Sheet ID and Sheet name, then run `initializeProject` once.
-- To see server logs: View → Executions in the Apps Script editor.
-
----
-
-This proof-of-concept keeps your existing Google stack while removing manual steps. You can iterate from here to add approvals, reminders, or AppSheet front-ends.
+Troubleshooting
+- Authorization prompts: accept Drive/Sheets/Docs permissions.
+- If recent requests is empty: try submitting once; the sheet is created on first run.
+- To reset: in Apps Script → Project Settings → Script properties, delete `SPREADSHEET_ID` and/or `PARENT_FOLDER_ID`, then reload the web app.

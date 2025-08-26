@@ -6,6 +6,7 @@
   <title>Workflow Demo</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 24px; color: #222; }
+    .note { background: #f1f8ff; border: 1px solid #cfe3ff; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
     .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; }
     .row > .field { flex: 1 1 260px; display: flex; flex-direction: column; }
@@ -26,6 +27,11 @@
 </head>
 <body>
   <h2>Workflow Proof of Concept</h2>
+
+  <div class="note">
+    No setup needed. On first run, this app will create a tracker Sheet and a parent Drive folder automatically. You may be asked to authorize permissions.
+  </div>
+
   <div class="card">
     <h3>Create Request</h3>
     <div class="row">

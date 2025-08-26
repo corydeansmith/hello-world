@@ -1,19 +1,14 @@
-const CONFIG = {
-  spreadsheetId: 'PUT_SPREADSHEET_ID_HERE',
+const SCRIPT_PROP = PropertiesService.getScriptProperties();
+
+const DEFAULTS = {
+  trackerSpreadsheetTitle: 'Workflow Demo Tracker',
   sheetName: 'MasterTracker',
-  parentFolderId: 'PUT_PARENT_FOLDER_ID_HERE',
-  templateDocIdByType: {
-    General: 'PUT_DOC_TEMPLATE_ID_HERE'
-  },
+  parentFolderName: 'Workflow Demo Requests',
   statusValues: ['Submitted', 'In Review', 'Approved', 'Rejected', 'Delivered', 'Archived']
 };
 
-function initializeProject() {
-  const sheet = getOrCreateMasterSheet();
-  ensureHeaderRow(sheet);
-}
-
 function doGet() {
+  ensureBootstrap();
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
     .setTitle('Workflow Demo')
@@ -24,12 +19,44 @@ function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
-function getOrCreateMasterSheet() {
-  const spreadsheet = SpreadsheetApp.openById(CONFIG.spreadsheetId);
-  let sheet = spreadsheet.getSheetByName(CONFIG.sheetName);
-  if (!sheet) {
-    sheet = spreadsheet.insertSheet(CONFIG.sheetName);
+function ensureBootstrap() {
+  let spreadsheetId = SCRIPT_PROP.getProperty('SPREADSHEET_ID');
+  if (!spreadsheetId) {
+    const ss = SpreadsheetApp.create(DEFAULTS.trackerSpreadsheetTitle);
+    spreadsheetId = ss.getId();
+    SCRIPT_PROP.setProperty('SPREADSHEET_ID', spreadsheetId);
   }
+
+  // Ensure sheet exists and headers are present
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  let sheet = spreadsheet.getSheetByName(DEFAULTS.sheetName);
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(DEFAULTS.sheetName);
+  }
+  ensureHeaderRow(sheet);
+
+  let parentFolderId = SCRIPT_PROP.getProperty('PARENT_FOLDER_ID');
+  if (!parentFolderId) {
+    const existingFolders = DriveApp.getFoldersByName(DEFAULTS.parentFolderName);
+    let folder = null;
+    if (existingFolders.hasNext()) {
+      folder = existingFolders.next();
+    } else {
+      folder = DriveApp.createFolder(DEFAULTS.parentFolderName);
+    }
+    SCRIPT_PROP.setProperty('PARENT_FOLDER_ID', folder.getId());
+  }
+}
+
+function getSpreadsheet() {
+  ensureBootstrap();
+  const spreadsheetId = SCRIPT_PROP.getProperty('SPREADSHEET_ID');
+  return SpreadsheetApp.openById(spreadsheetId);
+}
+
+function getMasterSheet() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(DEFAULTS.sheetName) || ss.insertSheet(DEFAULTS.sheetName);
   return sheet;
 }
 
@@ -87,32 +114,30 @@ function safeString(value) {
   return value == null ? '' : String(value);
 }
 
-function getTemplateDocIdForType(type) {
-  const key = type && CONFIG.templateDocIdByType[type] ? type : 'General';
-  return CONFIG.templateDocIdByType[key];
+function getParentFolder() {
+  ensureBootstrap();
+  const parentFolderId = SCRIPT_PROP.getProperty('PARENT_FOLDER_ID');
+  return DriveApp.getFolderById(parentFolderId);
 }
 
-function createOrCopyDocAndFolder(requestId, type, title) {
-  const parentFolder = DriveApp.getFolderById(CONFIG.parentFolderId);
+function createDocAndFolder(requestId, type, title) {
+  const parentFolder = getParentFolder();
   const folderName = `${requestId} - ${type}${title ? ' - ' + title : ''}`;
   const folder = parentFolder.createFolder(folderName);
 
-  const templateDocId = getTemplateDocIdForType(type);
-  const templateFile = DriveApp.getFileById(templateDocId);
-  const newDocFile = templateFile.makeCopy(`${requestId} - ${type} - Doc`, folder);
+  const doc = DocumentApp.create(`${requestId} - ${type} - Doc`);
+  const newDocFile = DriveApp.getFileById(doc.getId());
+  folder.addFile(newDocFile);
+  DriveApp.getRootFolder().removeFile(newDocFile);
 
-  const doc = DocumentApp.openById(newDocFile.getId());
   const body = doc.getBody();
-  const replacements = {
-    '{{RequestID}}': requestId,
-    '{{Type}}': type,
-    '{{Title}}': title || '',
-    '{{CreatedAt}}': nowIso()
-  };
-  Object.keys(replacements).forEach(k => body.replaceText(k, safeString(replacements[k])));
+  body.appendParagraph(`Request ${requestId}`);
+  body.appendParagraph(`Type: ${type}`);
+  body.appendParagraph(`Title: ${title || ''}`);
+  body.appendParagraph(`CreatedAt: ${nowIso()}`);
   doc.saveAndClose();
 
-  return { folder, doc, newDocFile };
+  return { folder, doc };
 }
 
 function appendRow(sheet, valuesByHeader) {
@@ -129,7 +154,7 @@ function appendRow(sheet, valuesByHeader) {
 }
 
 function listRecentRequests(limit) {
-  const sheet = getOrCreateMasterSheet();
+  const sheet = getMasterSheet();
   const headerIndex = getHeaderIndexes(sheet);
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return [];
@@ -146,10 +171,10 @@ function listRecentRequests(limit) {
 }
 
 function setStatus(requestId, newStatus) {
-  if (!CONFIG.statusValues.includes(newStatus)) {
+  if (!DEFAULTS.statusValues.includes(newStatus)) {
     throw new Error('Invalid status: ' + newStatus);
   }
-  const sheet = getOrCreateMasterSheet();
+  const sheet = getMasterSheet();
   const headerIndex = getHeaderIndexes(sheet);
   const idCol = headerIndex['RequestID'];
   const statusCol = headerIndex['Status'];
@@ -166,8 +191,7 @@ function setStatus(requestId, newStatus) {
 }
 
 function createRequest(formData) {
-  const sheet = getOrCreateMasterSheet();
-  ensureHeaderRow(sheet);
+  const sheet = getMasterSheet();
 
   const type = safeString(formData && formData.type) || 'General';
   const title = safeString(formData && formData.title) || '';
@@ -178,7 +202,7 @@ function createRequest(formData) {
   const requestId = generateRequestId();
   const createdAt = nowIso();
 
-  const { folder, doc } = createOrCopyDocAndFolder(requestId, type, title);
+  const { folder, doc } = createDocAndFolder(requestId, type, title);
 
   const row = {
     RequestID: requestId,
@@ -203,4 +227,8 @@ function createRequest(formData) {
     folderUrl: folder.getUrl(),
     docUrl: doc.getUrl()
   };
+}
+
+function initializeProject() {
+  ensureBootstrap();
 }
