@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #222; }
+    .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .row > .field { flex: 1 1 260px; display: flex; flex-direction: column; }
+    label { font-weight: 600; margin-bottom: 6px; }
+    input, select { padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    button { background: #1a73e8; color: #fff; border: 0; border-radius: 6px; padding: 10px 16px; cursor: pointer; font-weight: 600; }
+    button[disabled] { opacity: 0.6; cursor: not-allowed; }
+    .links a { margin-right: 12px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; text-align: left; padding: 8px; font-size: 13px; }
+    .muted { color: #666; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-left: 8px; }
+    @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+    .success { color: #0b8043; }
+    .error { color: #d93025; }
+    .small { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Workflow Proof of Concept</h2>
+  <div class="card">
+    <h3>Create Request</h3>
+    <div class="row">
+      <div class="field">
+        <label for="title">Title</label>
+        <input id="title" type="text" placeholder="Short title" />
+      </div>
+      <div class="field">
+        <label for="type">Type</label>
+        <select id="type">
+          <option value="General" selected>General</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="requesterEmail">Requester Email</label>
+        <input id="requesterEmail" type="email" placeholder="name@example.com" />
+      </div>
+      <div class="field">
+        <label for="assignee">Assignee</label>
+        <input id="assignee" type="email" placeholder="assignee@example.com" />
+      </div>
+      <div class="field">
+        <label for="dueDate">Due Date</label>
+        <input id="dueDate" type="date" />
+      </div>
+    </div>
+    <div>
+      <button id="createBtn" onclick="createRequest()">Create request<span id="spinner" class="spinner" style="display:none;"></span></button>
+      <span id="result" class="small"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row" style="align-items:center; justify-content: space-between;">
+      <h3 style="margin:0;">Recent Requests</h3>
+      <button onclick="refreshRecent()">Refresh</button>
+    </div>
+    <div id="recent"></div>
+  </div>
+
+  <script>
+    function getValue(id) { return document.getElementById(id).value.trim(); }
+
+    function setLoading(isLoading) {
+      const btn = document.getElementById('createBtn');
+      const spinner = document.getElementById('spinner');
+      btn.disabled = isLoading;
+      spinner.style.display = isLoading ? 'inline-block' : 'none';
+    }
+
+    function createRequest() {
+      const data = {
+        title: getValue('title'),
+        type: getValue('type') || 'General',
+        requesterEmail: getValue('requesterEmail'),
+        assignee: getValue('assignee'),
+        dueDate: getValue('dueDate')
+      };
+
+      setLoading(true);
+      document.getElementById('result').textContent = '';
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          setLoading(false);
+          if (res && res.ok) {
+            const el = document.getElementById('result');
+            el.className = 'small success';
+            el.innerHTML = 'Created ' + res.requestId + ' — ' +
+              '<span class="links">' +
+              '<a href="' + res.folderUrl + '" target="_blank">Folder</a>' +
+              '<a href="' + res.docUrl + '" target="_blank">Doc</a>' +
+              '</span>';
+            refreshRecent();
+          } else {
+            showError('Unknown error');
+          }
+        })
+        .withFailureHandler(function(err) {
+          setLoading(false);
+          showError(err && err.message ? err.message : 'Failed');
+        })
+        .createRequest(data);
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('result');
+      el.className = 'small error';
+      el.textContent = msg;
+    }
+
+    function refreshRecent() {
+      google.script.run
+        .withSuccessHandler(renderRecent)
+        .withFailureHandler(function(err){
+          document.getElementById('recent').innerHTML = '<span class="error">Failed to load recent</span>';
+        })
+        .listRecentRequests(10);
+    }
+
+    function renderRecent(items) {
+      if (!items || items.length === 0) {
+        document.getElementById('recent').innerHTML = '<div class="muted">No requests yet</div>';
+        return;
+      }
+      let html = '<table><thead><tr>' +
+        '<th>RequestID</th><th>Status</th><th>Type</th><th>Title</th>' +
+        '<th>Assignee</th><th>DueDate</th><th>Folder</th><th>Doc</th>' +
+        '</tr></thead><tbody>';
+      items.forEach(function(it) {
+        html += '<tr>' +
+          '<td class="muted">' + (it.RequestID || '') + '</td>' +
+          '<td>' + (it.Status || '') + '</td>' +
+          '<td>' + (it.Type || '') + '</td>' +
+          '<td>' + (it.Title || '') + '</td>' +
+          '<td>' + (it.Assignee || '') + '</td>' +
+          '<td>' + (it.DueDate || '') + '</td>' +
+          '<td>' + (it.FolderLink ? '<a target="_blank" href="' + it.FolderLink + '">Open</a>' : '') + '</td>' +
+          '<td>' + (it.DocLink ? '<a target="_blank" href="' + it.DocLink + '">Open</a>' : '') + '</td>' +
+        '</tr>';
+      });
+      html += '</tbody></table>';
+      document.getElementById('recent').innerHTML = html;
+    }
+
+    window.addEventListener('load', refreshRecent);
+  </script>
+</body>
+</html>
